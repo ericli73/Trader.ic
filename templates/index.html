@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Trader.ic Screener</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+</head>
+<body>
+  <nav class="nav">
+    <div class="nav-inner">
+      <a class="brand" href="/">Trader.ic</a>
+      <div class="nav-links">
+        <span class="nav-status"><span class="dot"></span><span>Auto-rescan every {{ scan_interval_minutes }} min</span></span>
+      </div>
+    </div>
+  </nav>
+
+  <div class="container">
+    <header class="hero reveal">
+      <span class="eyebrow">S&amp;P 500 &middot; Technical Screener</span>
+      <h1>Where the signals line up right now.</h1>
+      <p class="lede">A live read on momentum, trend, and volume across all 500 stocks &mdash; ranked, scored, and explained.</p>
+
+      <div class="stat-row">
+        {% if timestamp %}
+        <span class="stat-pill">Scanned <strong>{{ timestamp.strftime('%H:%M:%S') }}</strong></span>
+        <span class="stat-pill"><strong>{{ total_scored }}</strong> stocks scored</span>
+        <span class="stat-pill">Showing top <strong>{{ top }}</strong></span>
+        <span class="stat-pill">Prices as of <strong><span id="quotes-updated">now</span></strong></span>
+        {% else %}
+        <span class="stat-pill">No scan yet</span>
+        {% endif %}
+      </div>
+
+      <div class="actions">
+        <a class="btn btn-primary" href="/?refresh=1&top={{ top }}">Rescan technicals</a>
+        <div class="segmented">
+          <a class="{{ 'active' if top == 10 }}" href="/?top=10">Top 10</a>
+          <a class="{{ 'active' if top == 25 }}" href="/?top=25">Top 25</a>
+          <a class="{{ 'active' if top == 50 }}" href="/?top=50">Top 50</a>
+        </div>
+      </div>
+    </header>
+
+    <div class="list reveal">
+      <div class="list-row head">
+        <div class="rank">#</div>
+        <div>Symbol</div>
+        <div>Price</div>
+        <div>Change</div>
+        <div>Call &amp; signals</div>
+      </div>
+      {% for symbol, signal, label in rows %}
+      {% set q = quotes.get(symbol) %}
+      <div class="list-row">
+        <div class="rank">{{ loop.index }}</div>
+        <div><a class="symbol-link" href="/stock/{{ symbol }}">{{ symbol }}</a></div>
+        <div class="price-cell" data-symbol="{{ symbol }}">{{ '%.2f' % q.price if q else '-' }}</div>
+        <div class="change-cell {{ 'pos' if q and q.change >= 0 else 'neg' }}" data-symbol="{{ symbol }}">
+          {{ '%+.2f (%+.2f%%)' % (q.change, q.change_pct) if q else '-' }}
+        </div>
+        <div class="reasons-cell">
+          <span class="badge {{ label }}">{{ label }}</span><span class="score-note">{{ '%+d' % signal.score }}</span>
+          {{ signal.reasons | join('; ') }}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+
+    <p class="disclaimer">Technical screener output only, based on price/volume history &mdash; not financial advice. Prices are near-real-time via Yahoo Finance, not a licensed live feed. Verify independently before trading.</p>
+  </div>
+
+  <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+  <script>
+    const symbols = [{% for symbol, _, _ in rows %}"{{ symbol }}"{{ "," if not loop.last }}{% endfor %}];
+    const REFRESH_MS = 15000;
+    const initialScanTs = "{{ timestamp.isoformat() if timestamp else '' }}";
+
+    async function checkForNewScan() {
+      try {
+        const res = await fetch("/api/scan-meta");
+        const data = await res.json();
+        if (data.timestamp && data.timestamp !== initialScanTs) {
+          location.reload();
+        }
+      } catch (e) {
+        console.error("scan-meta check failed", e);
+      }
+    }
+
+    async function refreshQuotes() {
+      if (symbols.length === 0) return;
+      try {
+        const res = await fetch(`/api/quotes?symbols=${symbols.join(",")}`);
+        const data = await res.json();
+        for (const symbol of symbols) {
+          const q = data[symbol];
+          if (!q) continue;
+          const priceCell = document.querySelector(`.price-cell[data-symbol="${symbol}"]`);
+          const changeCell = document.querySelector(`.change-cell[data-symbol="${symbol}"]`);
+          if (priceCell) {
+            const prev = parseFloat(priceCell.textContent);
+            priceCell.textContent = q.price.toFixed(2);
+            if (!isNaN(prev) && q.price !== prev) {
+              priceCell.classList.remove("price-flash-up", "price-flash-down");
+              void priceCell.offsetWidth;
+              priceCell.classList.add(q.price > prev ? "price-flash-up" : "price-flash-down");
+            }
+          }
+          if (changeCell) {
+            changeCell.textContent = `${q.change >= 0 ? "+" : ""}${q.change.toFixed(2)} (${q.change_pct >= 0 ? "+" : ""}${q.change_pct.toFixed(2)}%)`;
+            changeCell.classList.toggle("pos", q.change >= 0);
+            changeCell.classList.toggle("neg", q.change < 0);
+          }
+        }
+        document.getElementById("quotes-updated").textContent = new Date().toLocaleTimeString();
+      } catch (e) {
+        console.error("quote refresh failed", e);
+      }
+    }
+
+    setInterval(refreshQuotes, REFRESH_MS);
+    setInterval(checkForNewScan, 60000);
+  </script>
+</body>
+</html>

@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ symbol }} - Trader.ic</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+</head>
+<body>
+  <nav class="nav">
+    <div class="nav-inner">
+      <a class="brand" href="/">Trader.ic</a>
+      <div class="nav-links">
+        <a class="nav-link" href="/">Screener</a>
+      </div>
+    </div>
+  </nav>
+
+  <div class="container">
+    <a class="back-link" href="/">&larr; Back to screener</a>
+
+    <header class="reveal">
+      <div class="stock-hero">
+        <h1>{{ symbol }}</h1>
+        <span class="stock-price"><span id="live-price">{{ '%.2f' % quote.price }}</span><span class="stock-currency">{{ quote.currency }}</span></span>
+        <span id="live-change" class="stock-change {{ 'pos' if quote.change >= 0 else 'neg' }}">
+          {{ '%+.2f (%+.2f%%)' % (quote.change, quote.change_pct) }}
+        </span>
+      </div>
+      <div class="stock-updated">updated <span id="quote-time">just now</span></div>
+    </header>
+
+    <div class="rec-card reveal {{ label }}">
+      <span class="rec-pill">{{ label }}</span>
+      <span class="rec-copy"><span class="score">score {{ '%+d' % signal.score if signal else 'n/a' }}</span> &mdash; {{ blurb }}</span>
+    </div>
+    <ul class="reasons reveal">
+      {% for reason in (signal.reasons if signal else []) %}
+      <li>{{ reason }}</li>
+      {% endfor %}
+    </ul>
+
+    <div class="card chart-block reveal">
+      <div class="section-label">Today's session &middot; live, updates every 30s</div>
+      <canvas id="intradayChart" height="90"></canvas>
+    </div>
+
+    <div class="card chart-block reveal">
+      <div class="section-label">6-month daily price with SMA20 / SMA50</div>
+      <canvas id="dailyChart" height="110"></canvas>
+    </div>
+
+    <p class="disclaimer">
+      Heuristic technical screener output, not financial advice. Prices are near-real-time via Yahoo Finance,
+      not a licensed live feed. Verify independently before trading.
+    </p>
+  </div>
+
+  <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+  <script>
+    const SYMBOL = "{{ symbol }}";
+    const root = getComputedStyle(document.documentElement);
+    const col = (name) => root.getPropertyValue(name).trim();
+
+    Chart.defaults.color = col('--ink-secondary');
+    Chart.defaults.borderColor = col('--border');
+    Chart.defaults.font.family = "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+
+    const dailyChart = new Chart(document.getElementById('dailyChart'), {
+      type: 'line',
+      data: {
+        labels: {{ chart.dates | tojson }},
+        datasets: [
+          { label: 'Close', data: {{ chart.close | tojson }}, borderColor: col('--series-close'), borderWidth: 2, pointRadius: 0, tension: 0.1 },
+          { label: 'SMA20', data: {{ chart.sma20 | tojson }}, borderColor: col('--series-sma20'), borderWidth: 2, pointRadius: 0, tension: 0.1 },
+          { label: 'SMA50', data: {{ chart.sma50 | tojson }}, borderColor: col('--series-sma50'), borderWidth: 2, pointRadius: 0, tension: 0.1 },
+        ],
+      },
+      options: {
+        responsive: true,
+        interaction: { mode: 'index', intersect: false },
+        plugins: { legend: { position: 'top', labels: { boxWidth: 12, usePointStyle: true } }, tooltip: { enabled: true } },
+        scales: {
+          x: { ticks: { maxTicksLimit: 8 }, grid: { color: col('--border') } },
+          y: { grid: { color: col('--border') } },
+        },
+      },
+    });
+
+    const intradayChart = new Chart(document.getElementById('intradayChart'), {
+      type: 'line',
+      data: {
+        labels: [],
+        datasets: [
+          { label: SYMBOL, data: [], borderColor: col('--series-close'), borderWidth: 2, pointRadius: 0, tension: 0.15, fill: false },
+        ],
+      },
+      options: {
+        responsive: true,
+        interaction: { mode: 'index', intersect: false },
+        plugins: { legend: { display: false }, tooltip: { enabled: true } },
+        scales: {
+          x: { ticks: { maxTicksLimit: 8 }, grid: { color: col('--border') } },
+          y: { grid: { color: col('--border') } },
+        },
+      },
+    });
+
+    async function refreshIntraday() {
+      try {
+        const res = await fetch(`/api/intraday/${SYMBOL}`);
+        const data = await res.json();
+        intradayChart.data.labels = data.times;
+        intradayChart.data.datasets[0].data = data.prices;
+        intradayChart.update('none');
+      } catch (e) {
+        console.error('intraday refresh failed', e);
+      }
+    }
+
+    async function refreshQuote() {
+      try {
+        const res = await fetch(`/api/quotes?symbols=${SYMBOL}`);
+        const data = await res.json();
+        const q = data[SYMBOL];
+        if (!q) return;
+        document.getElementById('live-price').textContent = q.price.toFixed(2);
+        const changeEl = document.getElementById('live-change');
+        changeEl.textContent = `${q.change >= 0 ? '+' : ''}${q.change.toFixed(2)} (${q.change_pct >= 0 ? '+' : ''}${q.change_pct.toFixed(2)}%)`;
+        changeEl.classList.toggle('pos', q.change >= 0);
+        changeEl.classList.toggle('neg', q.change < 0);
+        document.getElementById('quote-time').textContent = new Date().toLocaleTimeString();
+      } catch (e) {
+        console.error('quote refresh failed', e);
+      }
+    }
+
+    refreshIntraday();
+    setInterval(refreshIntraday, 30000);
+    setInterval(refreshQuote, 15000);
+  </script>
+</body>
+</html>
