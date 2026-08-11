@@ -11,7 +11,13 @@
     <div class="nav-inner">
       <a class="brand" href="/">Trader.ic</a>
       <div class="nav-links">
-        <span class="nav-status"><span class="dot"></span><span>Auto-rescan every {{ scan_interval_minutes }} min</span></span>
+        <form class="nav-search">
+          <input type="text" list="ticker-list" placeholder="Search ticker..." autocomplete="off" aria-label="Search ticker">
+          <datalist id="ticker-list">
+            {% for t in all_tickers %}<option value="{{ t }}">{% endfor %}
+          </datalist>
+        </form>
+        <a class="nav-link" href="/positions">My Positions</a>
       </div>
     </div>
   </nav>
@@ -20,7 +26,7 @@
     <header class="hero reveal">
       <span class="eyebrow">S&amp;P 500 &middot; Technical Screener</span>
       <h1>Where the signals line up right now.</h1>
-      <p class="lede">A live read on momentum, trend, and volume across all 500 stocks &mdash; ranked, scored, and explained.</p>
+      <p class="lede">Momentum, trend, risk, volume confluence, and relative strength combined into one score per stock &mdash; backed by out-of-sample backtest evidence, not just textbook signals.</p>
 
       <div class="stat-row">
         {% if timestamp %}
@@ -28,6 +34,7 @@
         <span class="stat-pill"><strong>{{ total_scored }}</strong> stocks scored</span>
         <span class="stat-pill">Showing top <strong>{{ top }}</strong></span>
         <span class="stat-pill">Prices as of <strong><span id="quotes-updated">now</span></strong></span>
+        <span class="stat-pill"><span class="dot"></span>Auto-rescan every <strong>{{ scan_interval_minutes }} min</strong></span>
         {% else %}
         <span class="stat-pill">No scan yet</span>
         {% endif %}
@@ -51,18 +58,27 @@
         <div>Change</div>
         <div>Call &amp; signals</div>
       </div>
-      {% for symbol, signal, label in rows %}
+      {% for symbol, ts in rows %}
       {% set q = quotes.get(symbol) %}
+      {% set eq = extended_quotes.get(symbol) %}
+      {% set tier_class = ts.tier.replace(' ', '-') %}
       <div class="list-row">
         <div class="rank">{{ loop.index }}</div>
         <div><a class="symbol-link" href="/stock/{{ symbol }}">{{ symbol }}</a></div>
-        <div class="price-cell" data-symbol="{{ symbol }}">{{ '%.2f' % q.price if q else '-' }}</div>
+        <div class="price-cell" data-symbol="{{ symbol }}">
+          {{ '%.2f' % q.price if q else '-' }}
+          {% if eq and eq.price is not none %}
+          <span class="extended-note {{ 'pos' if eq.change_pct and eq.change_pct >= 0 else 'neg' }}">{{ eq.label }} {{ '%.2f' % eq.price }}</span>
+          {% endif %}
+        </div>
         <div class="change-cell {{ 'pos' if q and q.change >= 0 else 'neg' }}" data-symbol="{{ symbol }}">
           {{ '%+.2f (%+.2f%%)' % (q.change, q.change_pct) if q else '-' }}
         </div>
+        {% set top_reasons = (ts.reasons[:2] + ts.risks[:1]) %}
+        {% set remaining = (ts.reasons | length + ts.risks | length) - (top_reasons | length) %}
         <div class="reasons-cell">
-          <span class="badge {{ label }}">{{ label }}</span><span class="score-note">{{ '%+d' % signal.score }}</span>
-          {{ signal.reasons | join('; ') }}
+          <span class="badge {{ tier_class }}">{{ ts.tier }}</span><span class="score-note">{{ '%.0f' % ts.score }}/100 &middot; {{ '%.0f' % ts.confidence }}% conf.</span>
+          {{ top_reasons | join('; ') }}{% if remaining > 0 %} &mdash; <a href="/stock/{{ symbol }}">+{{ remaining }} more</a>{% endif %}
         </div>
       </div>
       {% endfor %}
@@ -73,7 +89,7 @@
 
   <script src="{{ url_for('static', filename='js/main.js') }}"></script>
   <script>
-    const symbols = [{% for symbol, _, _ in rows %}"{{ symbol }}"{{ "," if not loop.last }}{% endfor %}];
+    const symbols = [{% for symbol, _ in rows %}"{{ symbol }}"{{ "," if not loop.last }}{% endfor %}];
     const REFRESH_MS = 15000;
     const initialScanTs = "{{ timestamp.isoformat() if timestamp else '' }}";
 

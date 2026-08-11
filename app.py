@@ -9,17 +9,29 @@ import time
 from datetime import datetime
 
 import pandas as pd
-from flask import Flask, abort, jsonify, render_template, request
+from flask import Flask, abort, jsonify, redirect, render_template, request, url_for
 
-from quotes.yahoo import get_quote, get_quotes
+from quotes.yahoo import get_extended_quote, get_extended_quotes, get_quote, get_quotes
+from screener.data import get_long_history
+from screener.exit import compute_exit_guidance
 from screener.indicators import sma
-from screener.pipeline import fetch_daily_history, fetch_intraday_history, run_screen
-from screener.scorer import recommend, score_ticker
-from screener.universe import to_yahoo_symbol
+from screener.pipeline import fetch_daily_history, fetch_intraday_history, run_screen, score_symbol
+from screener.positions import delete_position, get_all_positions, get_position, save_position
+from screener.scoring import format_evidence
+from screener.universe import get_sp500_tickers, to_yahoo_symbol
 
 app = Flask(__name__)
 
 SCAN_INTERVAL_SECONDS = 20 * 60  # auto-rescan the full S&P 500 every 20 minutes
+
+
+@app.context_processor
+def inject_ticker_list():
+    """S&P 500 symbols for the nav search bar's autocomplete, on every page."""
+    try:
+        return {"all_tickers": get_sp500_tickers()}
+    except Exception:
+        return {"all_tickers": []}
 
 _cache = {"results": None, "timestamp": None}
 _cache_lock = threading.Lock()
@@ -55,13 +67,15 @@ def index():
         results, timestamp = _cache["results"], _cache["timestamp"]
 
     shown = results[:top]
-    quotes = get_quotes([symbol for symbol, _ in shown])
-    rows = [(symbol, signal, recommend(signal.score)[0]) for symbol, signal in shown]
+    symbols = [symbol for symbol, _ in shown]
+    quotes = get_quotes(symbols)
+    extended_quotes = get_extended_quotes(symbols)
 
     return render_template(
         "index.html",
-        rows=rows,
+        rows=shown,
         quotes=quotes,
+        extended_quotes=extended_quotes,
         total_scored=len(results),
         timestamp=timestamp,
         top=top,
@@ -99,13 +113,17 @@ def _series_to_list(series, ndigits=2):
 @app.route("/stock/<symbol>")
 def stock_detail(symbol):
     symbol = symbol.upper()
-    daily = fetch_daily_history(symbol)
+    daily = fetch_daily_history(symbol)  # 6mo, for the price/SMA chart only
     if daily.empty or "Close" not in daily:
         abort(404, f"No price history found for {symbol}")
 
-    signal = score_ticker(daily)
-    label, blurb = recommend(signal.score) if signal else ("N/A", "Not enough price history to score this stock yet.")
+    ts = score_symbol(symbol)  # separate, deeper (5y) history for the actual score
+    evidence_display = format_evidence(ts.evidence) if ts else None
     quote = get_quote(to_yahoo_symbol(symbol))
+    try:
+        extended_quote = get_extended_quote(to_yahoo_symbol(symbol))
+    except Exception:
+        extended_quote = None
 
     close = daily["Close"]
     chart = {
@@ -115,15 +133,56 @@ def stock_detail(symbol):
         "sma50": _series_to_list(sma(close, 50)),
     }
 
+    position = get_position(symbol)
+    exit_guidance = None
+    if position and ts:
+        long_history = get_long_history(symbol, period="5y")
+        if not long_history.empty:
+            exit_guidance = compute_exit_guidance(position, long_history, quote.price, ts)
+
     return render_template(
         "stock.html",
         symbol=symbol,
         quote=quote,
-        signal=signal,
-        label=label,
-        blurb=blurb,
+        extended_quote=extended_quote,
+        ts=ts,
+        evidence_display=evidence_display,
         chart=chart,
+        position=position,
+        exit_guidance=exit_guidance,
     )
+
+
+@app.route("/stock/<symbol>/position", methods=["POST"])
+def save_position_route(symbol):
+    symbol = symbol.upper()
+    buy_price = request.form.get("buy_price", type=float)
+    shares = request.form.get("shares", type=float) or None
+    buy_date = request.form.get("buy_date") or None
+    if buy_price and buy_price > 0:
+        save_position(symbol, buy_price, shares, buy_date)
+    return redirect(url_for("stock_detail", symbol=symbol))
+
+
+@app.route("/stock/<symbol>/position/delete", methods=["POST"])
+def delete_position_route(symbol):
+    delete_position(symbol.upper())
+    return redirect(url_for("stock_detail", symbol=symbol.upper()))
+
+
+@app.route("/positions")
+def positions_page():
+    rows = []
+    for position in get_all_positions():
+        ts = score_symbol(position.symbol)
+        quote = get_quote(to_yahoo_symbol(position.symbol))
+        guidance = None
+        if ts:
+            long_history = get_long_history(position.symbol, period="5y")
+            if not long_history.empty:
+                guidance = compute_exit_guidance(position, long_history, quote.price, ts)
+        rows.append((position, quote, guidance))
+    return render_template("positions.html", rows=rows)
 
 
 @app.route("/api/intraday/<symbol>")

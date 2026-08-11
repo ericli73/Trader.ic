@@ -6,20 +6,31 @@ so the scanning logic lives in exactly one place.
 
 import yfinance as yf
 
-from .scorer import Signal, score_ticker
+from .data import get_long_history
+from .regime import get_current_regime
+from .scoring import TechnicalScore, compute_technical_score
 from .universe import get_sp500_tickers, to_yahoo_symbol
 
+# 2 years of daily bars - enough for 200-day moving averages, 12-month
+# momentum, and a 1-year beta/drawdown window (the old 6-month window
+# only supported the previous, simpler indicator-only scorer).
+SCAN_PERIOD = "2y"
+MIN_HISTORY_DAYS = 260
 
-def run_screen(limit: int | None = None, refresh: bool = False) -> list[tuple[str, Signal]]:
-    """Return (symbol, Signal) pairs sorted by score, highest first."""
+
+def run_screen(limit: int | None = None, refresh: bool = False) -> list[tuple[str, TechnicalScore]]:
+    """Return (symbol, TechnicalScore) pairs sorted by score, highest first."""
     tickers = get_sp500_tickers(refresh=refresh)
     if limit:
         tickers = tickers[:limit]
     yahoo_tickers = [to_yahoo_symbol(t) for t in tickers]
 
+    regime = get_current_regime()
+    spy_close = get_long_history("SPY", period=SCAN_PERIOD)["Close"]
+
     data = yf.download(
         yahoo_tickers,
-        period="6mo",
+        period=SCAN_PERIOD,
         interval="1d",
         group_by="ticker",
         threads=True,
@@ -33,9 +44,9 @@ def run_screen(limit: int | None = None, refresh: bool = False) -> list[tuple[st
             df = data[yt] if len(yahoo_tickers) > 1 else data
         except (KeyError, TypeError):
             continue
-        signal = score_ticker(df)
-        if signal:
-            results.append((orig, signal))
+        if df is None or df.empty or len(df.dropna(how="all")) < MIN_HISTORY_DAYS:
+            continue
+        results.append((orig, compute_technical_score(df, spy_close, regime)))
 
     results.sort(key=lambda item: item[1].score, reverse=True)
     return results
@@ -48,7 +59,7 @@ def _flatten(df):
 
 
 def fetch_daily_history(symbol: str, period: str = "6mo"):
-    """Daily OHLCV for one ticker, used for both scoring and charting."""
+    """Daily OHLCV for one ticker, used for the price/SMA chart display."""
     df = yf.download(
         to_yahoo_symbol(symbol), period=period, interval="1d", progress=False, auto_adjust=True
     )
@@ -62,3 +73,15 @@ def fetch_intraday_history(symbol: str):
     if df.empty:
         df = yf.download(yahoo_symbol, period="5d", interval="5m", progress=False, auto_adjust=True)
     return _flatten(df)
+
+
+def score_symbol(symbol: str) -> TechnicalScore | None:
+    """Full technical score for one ticker, using deep (5y) disk-cached
+    history - used by the stock detail page, independent of the homepage
+    scan's cache."""
+    df = get_long_history(symbol, period="5y")
+    if df.empty or len(df) < MIN_HISTORY_DAYS:
+        return None
+    regime = get_current_regime()
+    spy_close = get_long_history("SPY", period="5y")["Close"]
+    return compute_technical_score(df, spy_close, regime)

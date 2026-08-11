@@ -23,3 +23,68 @@ def macd(close: pd.Series, fast: int = 12, slow: int = 26, signal: int = 9):
 
 def sma(close: pd.Series, window: int) -> pd.Series:
     return close.rolling(window).mean()
+
+
+def atr(high: pd.Series, low: pd.Series, close: pd.Series, period: int = 14) -> pd.Series:
+    prev_close = close.shift(1)
+    tr = pd.concat(
+        [high - low, (high - prev_close).abs(), (low - prev_close).abs()], axis=1
+    ).max(axis=1)
+    return tr.ewm(alpha=1 / period, min_periods=period, adjust=False).mean()
+
+
+def stochastic(high: pd.Series, low: pd.Series, close: pd.Series, k_period: int = 14, d_period: int = 3):
+    lowest_low = low.rolling(k_period).min()
+    highest_high = high.rolling(k_period).max()
+    percent_k = 100 * (close - lowest_low) / (highest_high - lowest_low)
+    percent_d = percent_k.rolling(d_period).mean()
+    return percent_k, percent_d
+
+
+def bollinger_bands(close: pd.Series, period: int = 20, num_std: float = 2.0):
+    mid = sma(close, period)
+    std = close.rolling(period).std()
+    upper = mid + num_std * std
+    lower = mid - num_std * std
+    percent_b = (close - lower) / (upper - lower)
+    bandwidth = (upper - lower) / mid
+    return upper, lower, percent_b, bandwidth
+
+
+def adx(high: pd.Series, low: pd.Series, close: pd.Series, period: int = 14) -> pd.Series:
+    """Average Directional Index - trend strength regardless of direction."""
+    up_move = high.diff()
+    down_move = -low.diff()
+    plus_dm = up_move.where((up_move > down_move) & (up_move > 0), 0.0)
+    minus_dm = down_move.where((down_move > up_move) & (down_move > 0), 0.0)
+
+    tr_smooth = atr(high, low, close, period) * period  # Wilder's smoothed TR (un-normalized)
+    plus_di = 100 * plus_dm.ewm(alpha=1 / period, min_periods=period, adjust=False).mean() * period / tr_smooth
+    minus_di = 100 * minus_dm.ewm(alpha=1 / period, min_periods=period, adjust=False).mean() * period / tr_smooth
+
+    dx = 100 * (plus_di - minus_di).abs() / (plus_di + minus_di)
+    return dx.ewm(alpha=1 / period, min_periods=period, adjust=False).mean()
+
+
+def momentum_return(close: pd.Series, days: int) -> float | None:
+    """Simple % return over the last `days` trading days, or None if not enough history."""
+    if len(close) <= days:
+        return None
+    return float(close.iloc[-1] / close.iloc[-1 - days] - 1)
+
+
+def distance_from_high(close: pd.Series, window: int) -> float | None:
+    """% below the rolling `window`-day high (0 = at the high, negative = below)."""
+    if len(close) < window:
+        return None
+    rolling_high = close.rolling(window).max().iloc[-1]
+    return float(close.iloc[-1] / rolling_high - 1)
+
+
+def relative_strength(close: pd.Series, benchmark_close: pd.Series, days: int) -> float | None:
+    """Stock return minus benchmark return over the last `days` trading days."""
+    stock_ret = momentum_return(close, days)
+    bench_ret = momentum_return(benchmark_close, days)
+    if stock_ret is None or bench_ret is None:
+        return None
+    return stock_ret - bench_ret

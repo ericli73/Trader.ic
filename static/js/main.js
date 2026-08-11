@@ -8,6 +8,16 @@ document.addEventListener("DOMContentLoaded", () => {
     window.addEventListener("scroll", onScroll, { passive: true });
   }
 
+  const searchForm = document.querySelector(".nav-search");
+  if (searchForm) {
+    searchForm.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const input = searchForm.querySelector("input");
+      const symbol = input.value.trim().toUpperCase();
+      if (symbol) window.location.href = `/stock/${encodeURIComponent(symbol)}`;
+    });
+  }
+
   const revealEls = document.querySelectorAll(".reveal");
   if (revealEls.length && "IntersectionObserver" in window) {
     const io = new IntersectionObserver(

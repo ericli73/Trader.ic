@@ -16,13 +16,14 @@ def parse_args():
 def main() -> None:
     args = parse_args()
 
-    print("Downloading 6mo daily history and scoring S&P 500 stocks...")
+    print("Downloading 2y daily history and scoring S&P 500 stocks...")
     results = run_screen(limit=args.limit, refresh=args.refresh)
 
-    print(f"\nTop {args.top} swing-trade candidates as of {pd.Timestamp.now():%Y-%m-%d %H:%M} "
+    print(f"\nTop {args.top} candidates as of {pd.Timestamp.now():%Y-%m-%d %H:%M} "
           f"({len(results)} scored):\n")
-    for rank, (symbol, signal) in enumerate(results[: args.top], start=1):
-        print(f"{rank:>2}. {symbol:<6} score={signal.score:+d}  " + "; ".join(signal.reasons))
+    for rank, (symbol, ts) in enumerate(results[: args.top], start=1):
+        print(f"{rank:>2}. {symbol:<6} {ts.tier:<12} score={ts.score:5.1f}  confidence={ts.confidence:3.0f}%  "
+              + "; ".join(ts.reasons[:3]))
 
     print("\nTechnical screener output only - not financial advice. Verify independently before trading.")
 

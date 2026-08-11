@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>My Positions - Trader.ic</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+</head>
+<body>
+  <nav class="nav">
+    <div class="nav-inner">
+      <a class="brand" href="/">Trader.ic</a>
+      <div class="nav-links">
+        <form class="nav-search">
+          <input type="text" list="ticker-list" placeholder="Search ticker..." autocomplete="off" aria-label="Search ticker">
+          <datalist id="ticker-list">
+            {% for t in all_tickers %}<option value="{{ t }}">{% endfor %}
+          </datalist>
+        </form>
+        <a class="nav-link" href="/">Screener</a>
+      </div>
+    </div>
+  </nav>
+
+  <div class="container">
+    <header class="hero reveal">
+      <span class="eyebrow">Your Holdings</span>
+      <h1>My Positions</h1>
+      <p class="lede">Cost basis, live P&amp;L, and sell/hold guidance for everything you're tracking.</p>
+    </header>
+
+    {% if rows %}
+    <div class="list reveal">
+      <div class="list-row head">
+        <div class="rank">#</div>
+        <div>Symbol</div>
+        <div>Cost / Price</div>
+        <div>P&amp;L</div>
+        <div>Guidance</div>
+      </div>
+      {% for position, quote, guidance in rows %}
+      <div class="list-row">
+        <div class="rank">{{ loop.index }}</div>
+        <div><a class="symbol-link" href="/stock/{{ position.symbol }}">{{ position.symbol }}</a></div>
+        <div class="price-cell">${{ '%.2f' % position.buy_price }} &rarr; ${{ '%.2f' % quote.price }}</div>
+        {% if guidance %}
+        <div class="change-cell {{ 'pos' if guidance.pnl_pct >= 0 else 'neg' }}">
+          {{ '%+.1f%%' % (guidance.pnl_pct * 100) }}{% if guidance.pnl_dollars is not none %} ({{ '%+.2f' % guidance.pnl_dollars }}){% endif %}
+        </div>
+        <div class="reasons-cell">
+          <span class="badge action-badge-{{ guidance.action }}">{{ guidance.action }}</span>
+          {{ guidance.reasons | join('; ') }}
+        </div>
+        {% else %}
+        <div class="change-cell">-</div>
+        <div class="reasons-cell">Not enough data to score this stock yet.</div>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="card reveal">
+      <p class="evidence-note">No positions tracked yet. Open any stock's page and use "My position" to add your cost basis.</p>
+    </div>
+    {% endif %}
+
+    <p class="disclaimer">Risk-management guidance (stop-loss, trailing stop) plus the same technical model used across this app - not financial advice.</p>
+  </div>
+
+  <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>
