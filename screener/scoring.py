@@ -24,7 +24,7 @@ skipped and why.
 """
 
 import json
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 import pandas as pd
@@ -124,7 +124,7 @@ def compute_raw_factors(df: pd.DataFrame, spy_close: pd.Series | None) -> tuple[
         missing.append("12-month momentum (needs 1y+ history)")
     factors["mom_20d"] = momentum_return(close, 20)
 
-    sma50, sma100, sma200 = sma(close, 50), sma(close, 100), sma(close, 200)
+    sma50, sma200 = sma(close, 50), sma(close, 200)
     factors["price_above_sma50"] = bool(close.iloc[-1] > sma50.iloc[-1]) if pd.notna(sma50.iloc[-1]) else None
     factors["price_above_sma200"] = bool(close.iloc[-1] > sma200.iloc[-1]) if pd.notna(sma200.iloc[-1]) else None
     factors["golden_cross_state"] = (

@@ -353,8 +353,8 @@ a:hover { text-decoration: underline; }
 .extended-note.pos { color: var(--good); }
 .extended-note.neg { color: var(--bad); }
 .change-cell { font-variant-numeric: tabular-nums; font-size: 0.9rem; font-weight: 600; }
-.change-cell.pos, .score-pos { color: var(--good); }
-.change-cell.neg, .score-neg { color: var(--bad); }
+.change-cell.pos { color: var(--good); }
+.change-cell.neg { color: var(--bad); }
 
 .reasons-cell { color: var(--ink-secondary); font-size: 0.88rem; line-height: 1.4; }
 

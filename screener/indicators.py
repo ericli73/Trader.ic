@@ -33,24 +33,6 @@ def atr(high: pd.Series, low: pd.Series, close: pd.Series, period: int = 14) -> 
     return tr.ewm(alpha=1 / period, min_periods=period, adjust=False).mean()
 
 
-def stochastic(high: pd.Series, low: pd.Series, close: pd.Series, k_period: int = 14, d_period: int = 3):
-    lowest_low = low.rolling(k_period).min()
-    highest_high = high.rolling(k_period).max()
-    percent_k = 100 * (close - lowest_low) / (highest_high - lowest_low)
-    percent_d = percent_k.rolling(d_period).mean()
-    return percent_k, percent_d
-
-
-def bollinger_bands(close: pd.Series, period: int = 20, num_std: float = 2.0):
-    mid = sma(close, period)
-    std = close.rolling(period).std()
-    upper = mid + num_std * std
-    lower = mid - num_std * std
-    percent_b = (close - lower) / (upper - lower)
-    bandwidth = (upper - lower) / mid
-    return upper, lower, percent_b, bandwidth
-
-
 def adx(high: pd.Series, low: pd.Series, close: pd.Series, period: int = 14) -> pd.Series:
     """Average Directional Index - trend strength regardless of direction."""
     up_move = high.diff()
@@ -71,14 +53,6 @@ def momentum_return(close: pd.Series, days: int) -> float | None:
     if len(close) <= days:
         return None
     return float(close.iloc[-1] / close.iloc[-1 - days] - 1)
-
-
-def distance_from_high(close: pd.Series, window: int) -> float | None:
-    """% below the rolling `window`-day high (0 = at the high, negative = below)."""
-    if len(close) < window:
-        return None
-    rolling_high = close.rolling(window).max().iloc[-1]
-    return float(close.iloc[-1] / rolling_high - 1)
 
 
 def relative_strength(close: pd.Series, benchmark_close: pd.Series, days: int) -> float | None:
