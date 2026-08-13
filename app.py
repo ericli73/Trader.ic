@@ -33,6 +33,7 @@ def inject_ticker_list():
     except Exception:
         return {"all_tickers": []}
 
+
 _cache = {"results": None, "timestamp": None}
 _cache_lock = threading.Lock()
 
@@ -167,7 +168,7 @@ def save_position_route(symbol):
 @app.route("/stock/<symbol>/position/delete", methods=["POST"])
 def delete_position_route(symbol):
     delete_position(symbol.upper())
-    return redirect(url_for("stock_detail", symbol=symbol.upper()))
+    return redirect(request.referrer or url_for("stock_detail", symbol=symbol.upper()))
 
 
 @app.route("/positions")

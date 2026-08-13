@@ -57,3 +57,10 @@ PRIMARY_HORIZON = 20
 # not predictions, and are shown as clearly labeled as such.
 STOP_LOSS_PCT = 0.08
 ATR_TRAILING_STOP_MULT = 3.0
+
+# News sentiment (screener/news.py) is explicitly unvalidated - there's no
+# honest way to backtest it with free, non-point-in-time data. So it never
+# triggers a SELL by itself: at most it nudges HOLD -> TRIM, and only when
+# there's enough recent negative headline volume to not just be noise.
+NEWS_SENTIMENT_TRIM_THRESHOLD = -0.35  # avg VADER compound score at/below this counts as negative
+NEWS_SENTIMENT_MIN_HEADLINES = 3       # need at least this many recent headlines to act on sentiment

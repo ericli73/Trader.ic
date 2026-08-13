@@ -1,6 +1,6 @@
 """Sell/hold guidance for a tracked position.
 
-Combines two things that are honestly different in kind, and says so:
+Combines three things that are honestly different in kind, and says so:
   1. Standard, mechanical risk-management rules (fixed stop-loss, ATR
      trailing stop) - these aren't predictions, they're pre-committed
      limits on how much you're willing to lose.
@@ -8,14 +8,25 @@ Combines two things that are honestly different in kind, and says so:
      app (screener/scoring.py) - so "the model turned bearish" uses the
      identical, backtest-informed logic as the rest of the screener, not
      a separately invented rule.
+  3. Recent news sentiment (screener/news.py) - explicitly unvalidated,
+     since there's no honest way to backtest it with free data. It can
+     only ever nudge HOLD to TRIM, never trigger a SELL by itself, and
+     every reason it adds is labeled UNVALIDATED so it's never confused
+     with the backtested signals above.
 """
 
 from dataclasses import dataclass
 
 import pandas as pd
 
-from .config import ATR_TRAILING_STOP_MULT, STOP_LOSS_PCT
+from .config import (
+    ATR_TRAILING_STOP_MULT,
+    NEWS_SENTIMENT_MIN_HEADLINES,
+    NEWS_SENTIMENT_TRIM_THRESHOLD,
+    STOP_LOSS_PCT,
+)
 from .indicators import atr
+from .news import NewsSummary, get_news_summary
 from .positions import Position
 from .scoring import TechnicalScore
 
@@ -29,6 +40,7 @@ class ExitGuidance:
     stop_loss_price: float
     trailing_stop_price: float | None
     reasons: list[str]
+    news: NewsSummary
 
 
 def compute_exit_guidance(position: Position, df: pd.DataFrame, current_price: float, ts: TechnicalScore) -> ExitGuidance:
@@ -86,6 +98,19 @@ def compute_exit_guidance(position: Position, df: pd.DataFrame, current_price: f
     if position.buy_date is None:
         reasons.append("No purchase date on file, so no ATR trailing stop is shown - add one on the position form for a tighter, more relevant exit level.")
 
+    news = get_news_summary(position.symbol)
+    if (
+        action == "HOLD"
+        and news.avg_sentiment is not None
+        and news.headline_count >= NEWS_SENTIMENT_MIN_HEADLINES
+        and news.avg_sentiment <= NEWS_SENTIMENT_TRIM_THRESHOLD
+    ):
+        action = "TRIM"
+        reasons.append(
+            f"UNVALIDATED: {news.headline_count} recent headlines skew negative "
+            f"(avg sentiment {news.avg_sentiment:+.2f}) - not backtested, worth reading before deciding."
+        )
+
     return ExitGuidance(
         action=action,
         pnl_pct=pnl_pct,
@@ -94,4 +119,5 @@ def compute_exit_guidance(position: Position, df: pd.DataFrame, current_price: f
         stop_loss_price=stop_loss_price,
         trailing_stop_price=trailing_stop_price,
         reasons=reasons,
+        news=news,
     )

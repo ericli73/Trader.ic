@@ -66,7 +66,7 @@
         <div class="rank">{{ loop.index }}</div>
         <div><a class="symbol-link" href="/stock/{{ symbol }}">{{ symbol }}</a></div>
         <div class="price-cell" data-symbol="{{ symbol }}">
-          {{ '%.2f' % q.price if q else '-' }}
+          <span class="price-main">{{ '%.2f' % q.price if q else '-' }}</span>
           {% if eq and eq.price is not none %}
           <span class="extended-note {{ 'pos' if eq.change_pct and eq.change_pct >= 0 else 'neg' }}">{{ eq.label }} {{ '%.2f' % eq.price }}</span>
           {% endif %}
@@ -115,9 +115,10 @@
           if (!q) continue;
           const priceCell = document.querySelector(`.price-cell[data-symbol="${symbol}"]`);
           const changeCell = document.querySelector(`.change-cell[data-symbol="${symbol}"]`);
-          if (priceCell) {
-            const prev = parseFloat(priceCell.textContent);
-            priceCell.textContent = q.price.toFixed(2);
+          const priceMain = priceCell ? priceCell.querySelector(".price-main") : null;
+          if (priceMain) {
+            const prev = parseFloat(priceMain.textContent);
+            priceMain.textContent = q.price.toFixed(2);
             if (!isNaN(prev) && q.price !== prev) {
               priceCell.classList.remove("price-flash-up", "price-flash-down");
               void priceCell.offsetWidth;

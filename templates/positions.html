@@ -30,13 +30,14 @@
     </header>
 
     {% if rows %}
-    <div class="list reveal">
+    <div class="list positions-list reveal">
       <div class="list-row head">
         <div class="rank">#</div>
         <div>Symbol</div>
         <div>Cost / Price</div>
         <div>P&amp;L</div>
         <div>Guidance</div>
+        <div></div>
       </div>
       {% for position, quote, guidance in rows %}
       <div class="list-row">
@@ -55,6 +56,10 @@
         <div class="change-cell">-</div>
         <div class="reasons-cell">Not enough data to score this stock yet.</div>
         {% endif %}
+        <form method="post" action="/stock/{{ position.symbol }}/position/delete" class="remove-position-cell">
+          <button type="submit" class="remove-position" aria-label="Remove {{ position.symbol }}"
+                  onclick="return confirm('Remove {{ position.symbol }} from your positions?')">&times;</button>
+        </form>
       </div>
       {% endfor %}
     </div>

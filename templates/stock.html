@@ -78,6 +78,22 @@
             {% for r in exit_guidance.reasons %}<li>{{ r }}</li>{% endfor %}
           </ul>
         </div>
+        {% if exit_guidance.news.items %}
+        <div class="news-block">
+          <div class="section-label">Recent headlines (last 3 days) &middot; unvalidated, not backtested</div>
+          <ul class="news-list">
+            {% for item in exit_guidance.news.items %}
+            <li class="news-item">
+              <span class="news-sentiment {{ 'pos' if item.sentiment > 0.05 else ('neg' if item.sentiment < -0.05 else '') }}">
+                {{ '%+.2f' % item.sentiment }}
+              </span>
+              {% if item.url %}<a href="{{ item.url }}" target="_blank" rel="noopener">{{ item.title }}</a>{% else %}{{ item.title }}{% endif %}
+              <span class="news-meta">{{ item.publisher }} &middot; {{ item.published_at.strftime('%b %d, %H:%M') }}</span>
+            </li>
+            {% endfor %}
+          </ul>
+        </div>
+        {% endif %}
         {% endif %}
       {% else %}
         <p class="evidence-note">Track what you paid to get sell/hold guidance based on your own cost basis.</p>

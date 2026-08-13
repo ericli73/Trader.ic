@@ -137,7 +137,7 @@ quotes/                   Live quote fetching (yfinance fast_info)
 screener/
   universe.py             S&P 500 ticker list (scraped from Wikipedia, cached)
   data.py                 Long-history fetch with disk caching + retry/backoff
-  indicators.py           RSI, MACD, SMA, ATR, Stochastic, Bollinger, ADX, momentum, relative strength
+  indicators.py           RSI, MACD, SMA, ATR, ADX, momentum, relative strength
   regime.py               Market regime classification (SPY/VIX/yield curve)
   signals.py              Named technical signal event detectors
   scoring.py              Composite 0-100 score, confidence, signal tiers, reasoning
